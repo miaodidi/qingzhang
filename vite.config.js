@@ -1,5 +1,5 @@
 import {defineConfig} from 'vite';
-const version='2026.10.30.8';
+const version='2026.10.30.9';
 export default defineConfig({base:'./',define:{__APP_VERSION__:JSON.stringify(version)},plugins:[{name:'offline-service-worker',enforce:'post',generateBundle(_,bundle){
  const files=['./manifest.webmanifest','./icons/icon.svg','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable.png',...Object.keys(bundle).filter(p=>p!=='index.html').map(p=>'./'+p)];
  const html=String(bundle['index.html'].source);
