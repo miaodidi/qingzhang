@@ -1,0 +1,11 @@
+import {defineConfig} from 'vite';
+const version='2026.10.30.8';
+export default defineConfig({base:'./',define:{__APP_VERSION__:JSON.stringify(version)},plugins:[{name:'offline-service-worker',enforce:'post',generateBundle(_,bundle){
+ const files=['./manifest.webmanifest','./icons/icon.svg','./icons/icon-180.png','./icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable.png',...Object.keys(bundle).filter(p=>p!=='index.html').map(p=>'./'+p)];
+ const html=String(bundle['index.html'].source);
+ this.emitFile({type:'asset',fileName:'version.json',source:JSON.stringify({version})});
+ this.emitFile({type:'asset',fileName:'sw.js',source:`const VERSION=${JSON.stringify(version)},CACHE='qingzhang-'+VERSION;const FILES=${JSON.stringify(files)},HTML=${JSON.stringify(html)};
+self.addEventListener('install',e=>e.waitUntil((async()=>{const c=await caches.open(CACHE);await Promise.all(FILES.map(async path=>{const url=new URL(path,self.registration.scope);url.searchParams.set('release',VERSION);const response=await fetch(url,{cache:'no-store'});if(!response.ok)throw Error('Resource download failed');await c.put(path,response);}));await c.put('./',new Response(HTML,{headers:{'Content-Type':'text/html; charset=utf-8'}}));await c.put('./index.html',new Response(HTML,{headers:{'Content-Type':'text/html; charset=utf-8'}}));})()));
+self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k.startsWith('qingzhang-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
+self.addEventListener('message',e=>{if(e.data?.type==='SKIP_WAITING')self.skipWaiting();if(e.data?.type==='GET_VERSION')e.ports[0]?.postMessage({version:VERSION});});
+self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(e.request.method!=='GET'||u.origin!==self.location.origin)return;if(u.pathname.endsWith('/version.json')||u.pathname.endsWith('/sw.js')){e.respondWith(fetch(e.request,{cache:'no-store'}));return;}e.respondWith(caches.open(CACHE).then(async c=>{const hit=await c.match(e.request,{ignoreSearch:e.request.mode==='navigate',ignoreVary:true});if(hit)return hit;try{return await fetch(e.request);}catch(err){if(e.request.mode==='navigate')return await c.match('./index.html');throw err;}}));});`});}}]});

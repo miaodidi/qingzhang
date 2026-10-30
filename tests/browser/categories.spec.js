@@ -1,0 +1,48 @@
+import {test,expect} from '@playwright/test';
+import {initialState} from '../../src/model.js';
+test('restore sorts categories, adds missing choices and respects later deletions',async({page})=>{
+ const s=initialState();delete s.settings.categoryCatalogVersion;
+ s.categories=s.categories.filter(c=>!c.id.startsWith('default-'));
+ s.transactions=[['a','e1'],['b','e1'],['c','e0']].map(([id,categoryId])=>({id,categoryId,type:'expense',amount:100,date:'2026-01-01',accountId:s.accounts[0].id,note:''}));
+ await page.goto('/');await page.locator('[data-action=settings]').click();await page.locator('[data-action=backup]').click();
+ await page.locator('#import-form [name=file]').setInputFiles({name:'test.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(s))});
+ await page.locator('#import-form button').click();await page.locator('[data-action=confirm-import]').click();
+ await page.locator('[data-action=add]').first().click();
+ await expect(page.locator('.category-choice small').first()).toHaveText('购物');
+ await expect(page.locator('.category-choice:visible')).toHaveCount(9);
+ await page.getByRole('button',{name:'展开',exact:true}).click();
+ await expect(page.locator('.category-choice small').filter({hasText:'饮料'})).toBeVisible();
+ await expect(page.locator('[name=categoryId]:checked')).toHaveValue('e1');
+ await page.locator('[data-action=close]').click();
+ await page.locator('[data-action=settings]').click();await page.locator('[data-action=categories]').click();
+ await expect(page.locator('.category-manage').first().locator('span').first()).toContainText('购物');
+ await page.getByRole('button',{name:'删除游戏',exact:true}).click();
+ await expect(page.getByRole('button',{name:'删除游戏',exact:true})).toHaveCount(0);
+ await page.reload();await page.locator('[data-action=settings]').click();await page.locator('[data-action=categories]').click();
+ await expect(page.getByRole('button',{name:'删除游戏',exact:true})).toHaveCount(0);
+});
+
+test('two rows expand and collapse without losing selected category or form values',async({page})=>{
+ await page.goto('/');await page.locator('[data-action=add]').first().click();
+ const visible=page.locator('.category-choice:visible');await expect(visible).toHaveCount(9);
+ const toggle=page.getByRole('button',{name:'展开',exact:true});
+ const ninth=await visible.nth(8).boundingBox(),last=await toggle.boundingBox();
+ expect(Math.abs(ninth.y-last.y)).toBeLessThan(2);expect(last.x).toBeGreaterThan(ninth.x);
+ await page.locator('#tx-form [name=amount]').fill('12.34');await page.locator('#tx-form [name=note]').fill('测试保留');
+ await toggle.click();await expect(visible).toHaveCount(41);
+ await page.locator('.category-choice').filter({hasText:'快递'}).click();
+ const selected=await page.locator('[name=categoryId]:checked').inputValue();
+ await page.getByRole('button',{name:'收起',exact:true}).click();await expect(visible).toHaveCount(9);
+ await expect(page.locator('#tx-categories')).toContainText('已选：快递');
+ await expect(page.locator('[name=categoryId]:checked')).toHaveValue(selected);
+ await expect(page.locator('#tx-form [name=amount]')).toHaveValue('12.34');
+ await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试保留');
+ await page.locator('#tx-form button[type=submit]').click();await expect(page.locator('#tx-form')).toHaveCount(0);
+ await page.locator('.transaction').first().click();
+ await expect(page.locator('[name=categoryId]:checked')).toHaveValue(selected);
+ await expect(page.locator('.category-choice:visible')).toHaveCount(9);
+ await page.locator('[data-action=tx-type][data-value=income]').click();
+ await expect(page.locator('[data-action=toggle-categories]')).toHaveCount(0);
+ await page.locator('[data-action=tx-type][data-value=transfer]').click();
+ await expect(page.locator('.category-grid')).toHaveCount(0);
+});
