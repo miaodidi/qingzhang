@@ -7,7 +7,7 @@ test.beforeEach(async({page})=>{await page.addInitScript(()=>{
  });});
 async function keyboard(page,h,offset=0){await page.evaluate(([h,o])=>window.testKeyboard(h,o),[h,offset]);}
 async function openNote(page){await page.goto('/');await page.locator('.bottom-nav [data-action=add]').click();const note=page.locator('#tx-form [name=note]');await note.scrollIntoViewIfNeeded();await page.locator('.sheet').evaluate(el=>el.getAnimations().forEach(a=>a.finish()));return note;}
-async function bounds(field){return field.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.closest('.sheet-body'),b=s?.getBoundingClientRect(),f=s?.querySelector('.budget-save-bar')?.getBoundingClientRect(),v=visualViewport;return {top:r.top,bottom:r.bottom,min:Math.max(v.offsetTop+24,b?b.top+24:0),max:Math.min(v.offsetTop+v.height-24,b?b.bottom-24:Infinity,f?f.top-24:Infinity)};});}
+async function bounds(field){return field.evaluate(el=>{const r=el.getBoundingClientRect(),s=el.closest('.sheet-body'),b=s?.getBoundingClientRect(),f=s?.closest('.sheet')?.querySelector('.sheet-footer')?.getBoundingClientRect(),v=visualViewport;return {top:r.top,bottom:r.bottom,min:Math.max(v.offsetTop+24,b?b.top+24:0),max:Math.min(v.offsetTop+v.height-24,b?b.bottom-24:Infinity,f?f.top-24:Infinity)};});}
 async function visibleWithGap(field){await expect.poll(async()=>{const b=await bounds(field);return b.top>=b.min-1&&b.bottom<=b.max+1;}).toBe(true);}
 test('bottom note stays above keyboard with gap, preserves draft and restores original scroll',async({page})=>{
  const note=await openNote(page),body=page.locator('.sheet-body');const before=await body.evaluate(e=>e.scrollTop);await note.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420,32);await visibleWithGap(note);await note.fill('晚饭备注测试');await keyboard(page,380,48);await visibleWithGap(note);await note.blur();await keyboard(page,874);await expect.poll(()=>body.evaluate(e=>e.scrollTop)).toBeCloseTo(before,0);await expect(note).toHaveValue('晚饭备注测试');
@@ -38,4 +38,16 @@ test('short account dialog keeps opening balance visible without moving backgrou
 });
 test('manual scrolling while keyboard is open is not pulled back to focused field',async({page})=>{
  const note=await openNote(page),body=page.locator('.sheet-body');await note.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420);await visibleWithGap(note);await body.evaluate(e=>{e.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:-100}));e.scrollTop=0;});await page.waitForTimeout(400);expect(await body.evaluate(e=>e.scrollTop)).toBe(0);
+});
+test('budget footer stays outside scrolling form; row focus cannot create hidden nested scrolling',async({page})=>{
+ await page.goto('/');await page.locator('[data-action=budget]').click();await expect(page.locator('#budget-form .budget-save-bar')).toHaveCount(0);await expect(page.locator('.sheet>.sheet-footer button')).toHaveAttribute('form','budget-form');
+ const input=page.locator('.budget-fields input').nth(3);await input.scrollIntoViewIfNeeded();await input.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420,40);await visibleWithGap(input);
+ const result=await input.evaluate(e=>{const row=e.closest('.budget-swipe');row.scrollTop=40;const body=e.closest('.sheet-body').getBoundingClientRect(),footer=e.closest('.sheet').querySelector('.sheet-footer').getBoundingClientRect();return {rowTop:row.scrollTop,bodyBottom:body.bottom,footerTop:footer.top,footerBottom:footer.bottom};});
+ expect(result.rowTop).toBe(0);expect(result.bodyBottom).toBeLessThanOrEqual(result.footerTop+1);expect(result.footerBottom).toBeLessThanOrEqual(461);
+});
+test('intermediate viewport bounce does not restore modal scroll before keyboard actually closes',async({page})=>{
+ const note=await openNote(page),body=page.locator('.sheet-body');const before=await body.evaluate(e=>e.scrollTop);await note.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420);await visibleWithGap(note);await keyboard(page,874);await page.waitForTimeout(250);await keyboard(page,420);await visibleWithGap(note);await page.waitForTimeout(300);await visibleWithGap(note);await note.blur();await keyboard(page,874);await expect.poll(()=>body.evaluate(e=>e.scrollTop)).toBeCloseTo(before,0);
+});
+test('opening and closing a sheet locks and restores underlying page position',async({page})=>{
+ await page.goto('/');await page.evaluate(()=>scrollTo(0,180));const before=await page.evaluate(()=>scrollY);await page.locator('.bottom-nav [data-action=add]').click();expect(await page.evaluate(()=>getComputedStyle(document.body).position)).toBe('fixed');await page.locator('[data-action=close]').click();await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(before);expect(await page.evaluate(()=>getComputedStyle(document.body).position)).not.toBe('fixed');
 });

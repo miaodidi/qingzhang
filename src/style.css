@@ -46,3 +46,11 @@ form .amount-input input:not([type=radio]):not([type=file]){border:0;background:
 
 /* Keep keyboard focus scrolling inside the sheet rather than the page behind it. */
 .sheet{overflow:hidden}.sheet-body{flex:1 1 auto;overflow-anchor:none}.sheet-body input,.sheet-body textarea,.sheet-body select{scroll-margin-block:24px}
+
+/* The footer belongs to the sheet, not to its scrolling form. */
+.sheet{overflow:clip;isolation:isolate}.sheet-body{overscroll-behavior-y:contain;-webkit-overflow-scrolling:auto}
+.sheet>.sheet-footer{position:relative;flex:0 0 auto;z-index:1;background:#fafbf5;border-top:1px solid var(--line);padding:10px 24px calc(12px + var(--safe-bottom));margin:0}
+.sheet-footer .full{margin-top:0}.sheet-footer .budget-swipe-hint{font-size:11px;color:#7c8a75;text-align:center;margin:0 0 8px;line-height:1.6}
+#budget-form .budget-swipe{overflow:clip}#budget-form .budget-swipe:not(.swipe-open):not(.swiping)>.budget-item{transform:none}
+#modal-root.keyboard-open .sheet-footer{padding-bottom:12px}
+#modal-root.keyboard-open .sheet-body{padding-bottom:32px}

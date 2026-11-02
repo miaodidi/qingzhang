@@ -18,7 +18,7 @@ export function setupKeyboardAvoidance(modalRoot){
   if(session){for(const node of containers(el))if(!session.scrolls.has(node))session.scrolls.set(node,{top:node.scrollTop,left:node.scrollLeft});return;}
   session={owner:el.closest('.sheet-body'),height:Math.max(restingHeight,viewport.height),width:viewport.width,scale:viewport.scale,x:window.scrollX,y:window.scrollY,scrolls:new Map(containers(el).map(node=>[node,{top:node.scrollTop,left:node.scrollLeft}])),keyboard:false,adjusted:false};
  }
- function reset(){session?.spacer?.remove();session=null;clearTimeout(restoreTimer);restoreTimer=0;}
+ function reset(){session?.spacer?.remove();modalRoot.classList.remove('keyboard-open');session=null;clearTimeout(restoreTimer);restoreTimer=0;}
  function restore(){
   if(!session)return;
   const saved=session;reset();
@@ -31,7 +31,7 @@ export function setupKeyboardAvoidance(modalRoot){
   let top=viewport.offsetTop+gap,bottom=viewport.offsetTop+viewport.height-gap;
   if(scroller){const bounds=scroller.getBoundingClientRect();top=Math.max(top,bounds.top+gap);bottom=Math.min(bottom,bounds.bottom-gap);}
   // A sticky Save bar is another obstruction, even though it is above the keyboard.
-  const footer=scroller?.querySelector('.budget-save-bar')||(!scroller?document.querySelector('.bottom-nav'):null);
+  const footer=scroller?.closest('.sheet')?.querySelector('.sheet-footer')||(!scroller?document.querySelector('.bottom-nav'):null);
   if(footer){const bounds=footer.getBoundingClientRect();if(bounds.top<bottom&&bounds.bottom>top)bottom=Math.min(bottom,bounds.top-gap);}
   if(bottom<=top)return;
   const delta=rect.height>bottom-top?rect.top-top:rect.bottom>bottom?rect.bottom-bottom:rect.top<top?rect.top-top:0;
@@ -55,9 +55,9 @@ export function setupKeyboardAvoidance(modalRoot){
   // Rotation and pinch zoom are not keyboard events; do not undo deliberate zooming.
   if(Math.abs(viewport.width-session.width)>40||Math.abs(viewport.scale-session.scale)>.05){reset();return;}
   const loss=session.height-viewport.height;
-  if(loss>120){session.keyboard=true;clearTimeout(restoreTimer);restoreTimer=0;}
+  if(loss>120){session.keyboard=true;modalRoot.classList.add('keyboard-open');clearTimeout(restoreTimer);restoreTimer=0;}
   if(session.keyboard&&loss<80){
-   if(!restoreTimer)restoreTimer=setTimeout(()=>{restoreTimer=0;if(session&&session.height-viewport.height<80)restore();},180);
+   if(!restoreTimer)restoreTimer=setTimeout(()=>{restoreTimer=0;if(session&&session.height-viewport.height<80)restore();},500);
    return;
   }
   const field=document.activeElement;
@@ -65,12 +65,13 @@ export function setupKeyboardAvoidance(modalRoot){
   else if(!session.keyboard&&!editable(field))reset();
   if(session&&performance.now()<followUntil)frame=requestAnimationFrame(update);
  }
- function follow(){followUntil=performance.now()+1400;schedule();}
+ function follow(){clearTimeout(restoreTimer);restoreTimer=0;followUntil=performance.now()+1400;schedule();}
  function schedule(){if(!frame)frame=requestAnimationFrame(update);clearTimeout(settleTimer);settleTimer=setTimeout(()=>{if(!frame)frame=requestAnimationFrame(update);},280);}
  // Capture before Safari's native focus scrolling, not after it has moved the page.
  document.addEventListener('pointerdown',e=>{const field=editable(e.target)?e.target:e.target.closest('label')?.control;if(editable(field)){remember(field);}else followUntil=0;},true);
  document.addEventListener('focusin',e=>{if(editable(e.target)){remember(e.target);follow();}});
  document.addEventListener('focusout',schedule);
+ modalRoot.addEventListener('modal-close',reset);
  viewport.addEventListener('resize',follow);viewport.addEventListener('scroll',schedule);
  window.addEventListener('resize',follow);
  document.addEventListener('scroll',()=>{if(session&&performance.now()<followUntil)schedule();},true);
