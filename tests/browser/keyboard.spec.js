@@ -21,3 +21,21 @@ test('budget field avoids sticky Save bar, and opening a different dialog does n
 test('page search scrolls only if obstructed and returns to previous position',async({page})=>{
  await page.goto('/');await page.locator('.bottom-nav [data-action=ledger]').click();const search=page.locator('#search');await search.evaluate(e=>e.focus({preventScroll:true}));const before=await page.evaluate(()=>scrollY);await keyboard(page,460);await visibleWithGap(search);expect(await page.evaluate(()=>scrollY)).toBe(before);await keyboard(page,280);await visibleWithGap(search);await keyboard(page,874);await expect.poll(()=>page.evaluate(()=>scrollY)).toBeCloseTo(before,0);
 });
+test('long modal corrects late native focus scrolling inside its own scroll layer',async({page})=>{
+ const note=await openNote(page),body=page.locator('.sheet-body');await note.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420);await visibleWithGap(note);
+ // Safari may perform a second native focus scroll after the viewport resize.
+ await page.waitForTimeout(650);await body.evaluate(e=>e.scrollTop=0);await visibleWithGap(note);
+});
+test('budget ignores non-scrolling wrapper and scrolls the modal body',async({page})=>{
+ await page.goto('/');await page.locator('[data-action=budget]').click();await page.locator('#budget-form').evaluate(e=>{e.style.overflow='auto';});
+ const input=page.locator('.budget-fields input').nth(6);await input.scrollIntoViewIfNeeded();await input.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420);await visibleWithGap(input);
+});
+test('viewport may shrink before focus event is delivered to the modal',async({page})=>{
+ const note=await openNote(page);await keyboard(page,420);await page.waitForTimeout(80);await note.evaluate(e=>e.focus({preventScroll:true}));await visibleWithGap(note);
+});
+test('short account dialog keeps opening balance visible without moving background page',async({page})=>{
+ await page.goto('/');await page.locator('.bottom-nav [data-action=accounts]').click();await page.locator('[data-action=add-account]').first().click();const input=page.locator('#account-form [name=opening]');await input.evaluate(e=>e.focus({preventScroll:true}));const pageY=await page.evaluate(()=>scrollY);await keyboard(page,440,24);await visibleWithGap(input);await input.fill('200');await keyboard(page,874);await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(pageY);await expect(input).toHaveValue('200');
+});
+test('manual scrolling while keyboard is open is not pulled back to focused field',async({page})=>{
+ const note=await openNote(page),body=page.locator('.sheet-body');await note.evaluate(e=>e.focus({preventScroll:true}));await keyboard(page,420);await visibleWithGap(note);await body.evaluate(e=>{e.dispatchEvent(new WheelEvent('wheel',{bubbles:true,deltaY:-100}));e.scrollTop=0;});await page.waitForTimeout(400);expect(await body.evaluate(e=>e.scrollTop)).toBe(0);
+});

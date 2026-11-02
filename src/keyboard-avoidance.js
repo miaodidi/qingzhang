@@ -4,15 +4,21 @@ export function setupKeyboardAvoidance(modalRoot){
  const viewport=window.visualViewport;
  if(!viewport)return;
  const gap=24;
- let session=null,frame=0,settleTimer=0,restoreTimer=0;
+ let session=null,frame=0,settleTimer=0,restoreTimer=0,followUntil=0;
+ let restingHeight=viewport.height,restingWidth=viewport.width,restingScale=viewport.scale;
  const editable=el=>el instanceof HTMLElement&&!el.matches(':disabled,[readonly]')&&(el.matches('textarea,select,[contenteditable="true"]')||el.matches('input:not([type=hidden]):not([type=radio]):not([type=checkbox]):not([type=file]):not([type=button]):not([type=submit]):not([type=range]):not([type=color])'));
- function containers(el){const list=[];for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){if(p.matches('.sheet-body')||/(auto|scroll)/.test(getComputedStyle(p).overflowY))list.push(p);}return list;}
+ function containers(el){
+  // The modal body owns scrolling, even when a nested form/wrapper has overflow.
+  const body=el.closest('.sheet-body');if(body)return [body];
+  const list=[];for(let p=el.parentElement;p&&p!==document.body;p=p.parentElement){if(p.scrollHeight>p.clientHeight+1&&/(auto|scroll)/.test(getComputedStyle(p).overflowY))list.push(p);}return list;
+ }
  function remember(el){
   if(!editable(el))return;
+  if(session&&session.owner!==el.closest('.sheet-body'))reset();
   if(session){for(const node of containers(el))if(!session.scrolls.has(node))session.scrolls.set(node,{top:node.scrollTop,left:node.scrollLeft});return;}
-  session={height:viewport.height,width:viewport.width,scale:viewport.scale,x:window.scrollX,y:window.scrollY,scrolls:new Map(containers(el).map(node=>[node,{top:node.scrollTop,left:node.scrollLeft}])),keyboard:false,adjusted:false};
+  session={owner:el.closest('.sheet-body'),height:Math.max(restingHeight,viewport.height),width:viewport.width,scale:viewport.scale,x:window.scrollX,y:window.scrollY,scrolls:new Map(containers(el).map(node=>[node,{top:node.scrollTop,left:node.scrollLeft}])),keyboard:false,adjusted:false};
  }
- function reset(){session?.spacer?.remove();session=null;}
+ function reset(){session?.spacer?.remove();session=null;clearTimeout(restoreTimer);restoreTimer=0;}
  function restore(){
   if(!session)return;
   const saved=session;reset();
@@ -42,6 +48,9 @@ export function setupKeyboardAvoidance(modalRoot){
   frame=0;
   modalRoot.style.setProperty('--visible-height',`${viewport.height}px`);
   modalRoot.style.setProperty('--visible-top',`${viewport.offsetTop}px`);
+  if(Math.abs(viewport.width-restingWidth)>40||Math.abs(viewport.scale-restingScale)>.05){restingHeight=viewport.height;restingWidth=viewport.width;restingScale=viewport.scale;reset();return;}
+  // Keep the unobscured baseline even if Safari delivers resize before focusin.
+  restingHeight=Math.max(restingHeight,viewport.height);
   if(!session)return;
   // Rotation and pinch zoom are not keyboard events; do not undo deliberate zooming.
   if(Math.abs(viewport.width-session.width)>40||Math.abs(viewport.scale-session.scale)>.05){reset();return;}
@@ -52,15 +61,20 @@ export function setupKeyboardAvoidance(modalRoot){
    return;
   }
   const field=document.activeElement;
-  if(session.keyboard&&editable(field))keepVisible(field);
-  else if(!session.keyboard&&!editable(field))session=null;
+  if(session.keyboard&&editable(field)&&performance.now()<followUntil)keepVisible(field);
+  else if(!session.keyboard&&!editable(field))reset();
+  if(session&&performance.now()<followUntil)frame=requestAnimationFrame(update);
  }
+ function follow(){followUntil=performance.now()+1400;schedule();}
  function schedule(){if(!frame)frame=requestAnimationFrame(update);clearTimeout(settleTimer);settleTimer=setTimeout(()=>{if(!frame)frame=requestAnimationFrame(update);},280);}
  // Capture before Safari's native focus scrolling, not after it has moved the page.
- document.addEventListener('pointerdown',e=>{const field=editable(e.target)?e.target:e.target.closest('label')?.control;if(editable(field))remember(field);},true);
- document.addEventListener('focusin',e=>{if(editable(e.target)){remember(e.target);schedule();}});
+ document.addEventListener('pointerdown',e=>{const field=editable(e.target)?e.target:e.target.closest('label')?.control;if(editable(field)){remember(field);}else followUntil=0;},true);
+ document.addEventListener('focusin',e=>{if(editable(e.target)){remember(e.target);follow();}});
  document.addEventListener('focusout',schedule);
- viewport.addEventListener('resize',schedule);viewport.addEventListener('scroll',schedule);
- window.addEventListener('resize',schedule);
+ viewport.addEventListener('resize',follow);viewport.addEventListener('scroll',schedule);
+ window.addEventListener('resize',follow);
+ document.addEventListener('scroll',()=>{if(session&&performance.now()<followUntil)schedule();},true);
+ document.addEventListener('touchmove',()=>{followUntil=0;},{passive:true});
+ document.addEventListener('wheel',()=>{followUntil=0;},{passive:true});
  update();
 }
