@@ -4,7 +4,9 @@ export function setupKeyboardAvoidance(modalRoot){
  const viewport=window.visualViewport;
  if(!viewport)return;
  const gap=24;
- let session=null,frame=0,settleTimer=0,restoreTimer=0,followUntil=0;
+ let session=null,frame=0,settleTimer=0,restoreTimer=0,followUntil=0,touch=null;
+ let appliedHeight=-1,appliedTop=-1;
+ const mobileWebKit=/AppleWebKit/.test(navigator.userAgent)&&(/iP(ad|hone|od)/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  let restingHeight=viewport.height,restingWidth=viewport.width,restingScale=viewport.scale;
  const editable=el=>el instanceof HTMLElement&&!el.matches(':disabled,[readonly]')&&(el.matches('textarea,select,[contenteditable="true"]')||el.matches('input:not([type=hidden]):not([type=radio]):not([type=checkbox]):not([type=file]):not([type=button]):not([type=submit]):not([type=range]):not([type=color])'));
  function containers(el){
@@ -18,7 +20,7 @@ export function setupKeyboardAvoidance(modalRoot){
   if(session){for(const node of containers(el))if(!session.scrolls.has(node))session.scrolls.set(node,{top:node.scrollTop,left:node.scrollLeft});return;}
   session={owner:el.closest('.sheet-body'),height:Math.max(restingHeight,viewport.height),width:viewport.width,scale:viewport.scale,x:window.scrollX,y:window.scrollY,scrolls:new Map(containers(el).map(node=>[node,{top:node.scrollTop,left:node.scrollLeft}])),keyboard:false,adjusted:false};
  }
- function reset(){session?.spacer?.remove();modalRoot.classList.remove('keyboard-open');session=null;clearTimeout(restoreTimer);restoreTimer=0;}
+ function reset(){touch=null;clearTimeout(settleTimer);session?.spacer?.remove();modalRoot.classList.remove('keyboard-open');session=null;clearTimeout(restoreTimer);restoreTimer=0;}
  function restore(){
   if(!session)return;
   const saved=session;reset();
@@ -46,8 +48,8 @@ export function setupKeyboardAvoidance(modalRoot){
  }
  function update(){
   frame=0;
-  modalRoot.style.setProperty('--visible-height',`${viewport.height}px`);
-  modalRoot.style.setProperty('--visible-top',`${viewport.offsetTop}px`);
+  if(appliedHeight!==viewport.height){modalRoot.style.setProperty('--visible-height',`${viewport.height}px`);appliedHeight=viewport.height;}
+  if(appliedTop!==viewport.offsetTop){modalRoot.style.setProperty('--visible-top',`${viewport.offsetTop}px`);appliedTop=viewport.offsetTop;}
   if(Math.abs(viewport.width-restingWidth)>40||Math.abs(viewport.scale-restingScale)>.05){restingHeight=viewport.height;restingWidth=viewport.width;restingScale=viewport.scale;reset();return;}
   // Keep the unobscured baseline even if Safari delivers resize before focusin.
   restingHeight=Math.max(restingHeight,viewport.height);
@@ -63,14 +65,25 @@ export function setupKeyboardAvoidance(modalRoot){
   const field=document.activeElement;
   if(session.keyboard&&editable(field)&&performance.now()<followUntil)keepVisible(field);
   else if(!session.keyboard&&!editable(field))reset();
-  if(session&&performance.now()<followUntil)frame=requestAnimationFrame(update);
+
  }
  function follow(){clearTimeout(restoreTimer);restoreTimer=0;followUntil=performance.now()+1400;schedule();}
- function schedule(){if(!frame)frame=requestAnimationFrame(update);clearTimeout(settleTimer);settleTimer=setTimeout(()=>{if(!frame)frame=requestAnimationFrame(update);},280);}
+ function schedule(){if(!frame)frame=requestAnimationFrame(update);clearTimeout(settleTimer);settleTimer=setTimeout(()=>{settleTimer=0;if(!frame)frame=requestAnimationFrame(update);},100);}
  // Capture before Safari's native focus scrolling, not after it has moved the page.
  document.addEventListener('pointerdown',e=>{const field=editable(e.target)?e.target:e.target.closest('label')?.control;if(editable(field)){remember(field);}else followUntil=0;},true);
  document.addEventListener('focusin',e=>{if(editable(e.target)){remember(e.target);follow();}});
  document.addEventListener('focusout',schedule);
+ // Apply the same preventScroll focus principle used by mobile overlay frameworks,
+ // scoped to first taps in our sheets; leave caret placement and text selection native.
+ modalRoot.addEventListener('touchstart',e=>{
+  if(!mobileWebKit||e.touches.length!==1)return;
+  const field=e.target.closest('input,textarea')||e.target.closest('label')?.control;
+  if(!editable(field)||field.tagName==='SELECT'||document.activeElement===field)return;
+  const t=e.touches[0];touch={field,x:t.clientX,y:t.clientY,moved:false};remember(field);
+ },{passive:true});
+ modalRoot.addEventListener('touchmove',e=>{if(touch){const t=e.touches[0];if(!t||Math.hypot(t.clientX-touch.x,t.clientY-touch.y)>8)touch.moved=true;}},{passive:true});
+ modalRoot.addEventListener('touchend',e=>{const t=touch;touch=null;if(!t||t.moved||!t.field.isConnected||!e.cancelable)return;e.preventDefault();t.field.focus({preventScroll:true});follow();},{passive:false});
+ modalRoot.addEventListener('touchcancel',()=>{touch=null;},{passive:true});
  modalRoot.addEventListener('modal-close',reset);
  viewport.addEventListener('resize',follow);viewport.addEventListener('scroll',schedule);
  window.addEventListener('resize',follow);

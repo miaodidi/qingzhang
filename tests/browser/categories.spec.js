@@ -37,7 +37,7 @@ test('two rows expand and collapse without losing selected category or form valu
  await expect(page.locator('[name=categoryId]:checked')).toHaveValue(selected);
  await expect(page.locator('#tx-form [name=amount]')).toHaveValue('12.34');
  await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试保留');
- await page.locator('#tx-form button[type=submit]').click();await expect(page.locator('#tx-form')).toHaveCount(0);
+ await page.locator('.tx-save-bar button[type=submit]').click();await expect(page.locator('#tx-form')).toHaveCount(0);
  await page.locator('.transaction').first().click();
  await expect(page.locator('[name=categoryId]:checked')).toHaveValue(selected);
  await expect(page.locator('.category-choice:visible')).toHaveCount(9);

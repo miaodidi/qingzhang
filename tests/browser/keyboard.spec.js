@@ -51,3 +51,13 @@ test('intermediate viewport bounce does not restore modal scroll before keyboard
 test('opening and closing a sheet locks and restores underlying page position',async({page})=>{
  await page.goto('/');await page.evaluate(()=>scrollTo(0,180));const before=await page.evaluate(()=>scrollY);await page.locator('.bottom-nav [data-action=add]').click();expect(await page.evaluate(()=>getComputedStyle(document.body).position)).toBe('fixed');await page.locator('[data-action=close]').click();await expect.poll(()=>page.evaluate(()=>scrollY)).toBe(before);expect(await page.evaluate(()=>getComputedStyle(document.body).position)).not.toBe('fixed');
 });
+test('stable keyboard does not continuously measure the focused field',async({page})=>{
+ const note=await openNote(page);await note.evaluate(e=>{window.fieldReads=0;const original=e.getBoundingClientRect.bind(e);e.getBoundingClientRect=()=>{window.fieldReads++;return original();};e.focus({preventScroll:true});});await keyboard(page,420);await visibleWithGap(note);await page.waitForTimeout(350);const start=await page.evaluate(()=>window.fieldReads);await page.waitForTimeout(650);expect(await page.evaluate(()=>window.fieldReads)-start).toBeLessThanOrEqual(2);
+});
+test('iPhone first tap uses preventScroll focus, preserves caret taps and ignores drags',async({page})=>{
+ await page.addInitScript(()=>Object.defineProperty(navigator,'userAgent',{get:()=> 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile Safari/604.1'}));
+ const note=await openNote(page);
+ const result=await note.evaluate(el=>{const opts=[];const original=el.focus.bind(el);el.focus=o=>{opts.push(o);original(o);};function touch(type,x=100){const e=new Event(type,{bubbles:true,cancelable:true});Object.defineProperty(e,'touches',{value:type==='touchend'?[]:[{clientX:x,clientY:400}]});el.dispatchEvent(e);return e.defaultPrevented;}
+ touch('touchstart');const first=touch('touchend');touch('touchstart');const again=touch('touchend');el.blur();touch('touchstart');touch('touchmove',150);const drag=touch('touchend',150);return {opts,first,again,drag};});
+ expect(result.opts).toEqual([{preventScroll:true}]);expect(result.first).toBe(true);expect(result.again).toBe(false);expect(result.drag).toBe(false);
+});
