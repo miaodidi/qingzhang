@@ -37,3 +37,5 @@ form .amount-input input:not([type=radio]):not([type=file]){border:0;background:
 #budget-overview .budget-entry>strong{font-size:14px;font-weight:600}#budget-overview-more{margin-top:18px}#budget-overview-more button:disabled{opacity:.55;cursor:default}#budget-overview .budget-meter.unset{background:repeating-linear-gradient(110deg,#e4e9dd 0px,#e4e9dd 6px,#eef1e9 6px,#eef1e9 12px)}
 
 #budget-overview .budget-meter.unset i{width:0}
+
+#budget-form .budget-save-bar{position:sticky;bottom:-28px;z-index:2;background:#fafbf5;padding:10px 0 calc(12px + var(--safe-bottom));border-top:1px solid var(--line);margin-top:16px}#budget-form .budget-save-bar .full{margin-top:0}#budget-category-picker:not([hidden]){display:grid;gap:12px;margin-top:16px;padding:16px;border:1px solid var(--line);border-radius:16px;background:#eef3e7}#budget-category-picker>label{font-size:13px;font-weight:600}.budget-picker-actions{display:flex;gap:10px}.budget-picker-actions button{flex:1}
