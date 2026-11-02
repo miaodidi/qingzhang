@@ -4,7 +4,7 @@ export function setupKeyboardAvoidance(modalRoot){
  const viewport=window.visualViewport;
  if(!viewport)return;
  const gap=24;
- let session=null,frame=0,settleTimer=0,restoreTimer=0,followUntil=0,touch=null;
+ let session=null,frame=0,settleTimer=0,restoreTimer=0,followUntil=0,touch=null,checkTimer=0,checkFrame=0;
  let appliedHeight=-1,appliedTop=-1;
  const mobileWebKit=/AppleWebKit/.test(navigator.userAgent)&&(/iP(ad|hone|od)/.test(navigator.userAgent)||navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
  let restingHeight=viewport.height,restingWidth=viewport.width,restingScale=viewport.scale;
@@ -20,13 +20,14 @@ export function setupKeyboardAvoidance(modalRoot){
   if(session){for(const node of containers(el))if(!session.scrolls.has(node))session.scrolls.set(node,{top:node.scrollTop,left:node.scrollLeft});return;}
   session={owner:el.closest('.sheet-body'),height:Math.max(restingHeight,viewport.height),width:viewport.width,scale:viewport.scale,x:window.scrollX,y:window.scrollY,scrolls:new Map(containers(el).map(node=>[node,{top:node.scrollTop,left:node.scrollLeft}])),keyboard:false,adjusted:false};
  }
- function reset(){touch=null;clearTimeout(settleTimer);session?.spacer?.remove();modalRoot.classList.remove('keyboard-open');session=null;clearTimeout(restoreTimer);restoreTimer=0;}
+ function reset(){touch=null;clearTimeout(checkTimer);cancelAnimationFrame(checkFrame);clearTimeout(settleTimer);session?.spacer?.remove();modalRoot.classList.remove('keyboard-open');session=null;clearTimeout(restoreTimer);restoreTimer=0;}
  function restore(){
   if(!session)return;
   const saved=session;reset();
   if(!saved.adjusted)return;
-  for(const [node,pos] of saved.scrolls)if(node.isConnected)node.scrollTo({top:pos.top,left:pos.left,behavior:'instant'});
-  window.scrollTo({top:saved.y,left:saved.x,behavior:'instant'});
+  for(const [node,pos] of saved.scrolls)if(node.isConnected&&Math.abs(node.scrollTop-pos.top)>1)node.scrollTo({top:pos.top,left:pos.left,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth'});
+  // A modal already locks the background; touching window scroll here makes iOS pan again.
+  if(!saved.owner&&(window.scrollX!==saved.x||window.scrollY!==saved.y))window.scrollTo({top:saved.y,left:saved.x,behavior:'instant'});
  }
  function keepVisible(el){
   const parents=containers(el),scroller=parents[0],rect=el.getBoundingClientRect();
@@ -57,18 +58,25 @@ export function setupKeyboardAvoidance(modalRoot){
   // Rotation and pinch zoom are not keyboard events; do not undo deliberate zooming.
   if(Math.abs(viewport.width-session.width)>40||Math.abs(viewport.scale-session.scale)>.05){reset();return;}
   const loss=session.height-viewport.height;
-  if(loss>120){session.keyboard=true;modalRoot.classList.add('keyboard-open');clearTimeout(restoreTimer);restoreTimer=0;}
+  if(loss>120){if(!session.keyboard){session.keyboard=true;modalRoot.classList.add('keyboard-open');}clearTimeout(restoreTimer);restoreTimer=0;}
   if(session.keyboard&&loss<80){
    if(!restoreTimer)restoreTimer=setTimeout(()=>{restoreTimer=0;if(session&&session.height-viewport.height<80)restore();},500);
    return;
   }
-  const field=document.activeElement;
-  if(session.keyboard&&editable(field)&&performance.now()<followUntil)keepVisible(field);
-  else if(!session.keyboard&&!editable(field))reset();
+  // Geometry writes above invalidate layout. Measure only after the viewport has
+  // stopped changing and the browser has had a frame to apply the new dimensions.
+  if(!session.keyboard&&!editable(document.activeElement))reset();
 
  }
  function follow(){clearTimeout(restoreTimer);restoreTimer=0;followUntil=performance.now()+1400;schedule();}
- function schedule(){if(!frame)frame=requestAnimationFrame(update);clearTimeout(settleTimer);settleTimer=setTimeout(()=>{settleTimer=0;if(!frame)frame=requestAnimationFrame(update);},100);}
+ function schedule(){
+  if(!frame)frame=requestAnimationFrame(update);
+  clearTimeout(checkTimer);cancelAnimationFrame(checkFrame);
+  checkTimer=setTimeout(()=>{checkTimer=0;checkFrame=requestAnimationFrame(()=>{
+   checkFrame=0;const field=document.activeElement;
+   if(session?.keyboard&&session.height-viewport.height>120&&editable(field)&&performance.now()<followUntil)keepVisible(field);
+  });},80);
+ }
  // Capture before Safari's native focus scrolling, not after it has moved the page.
  document.addEventListener('pointerdown',e=>{const field=editable(e.target)?e.target:e.target.closest('label')?.control;if(editable(field)){remember(field);}else followUntil=0;},true);
  document.addEventListener('focusin',e=>{if(editable(e.target)){remember(e.target);follow();}});

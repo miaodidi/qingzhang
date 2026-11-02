@@ -61,3 +61,8 @@ test('iPhone first tap uses preventScroll focus, preserves caret taps and ignore
  touch('touchstart');const first=touch('touchend');touch('touchstart');const again=touch('touchend');el.blur();touch('touchstart');touch('touchmove',150);const drag=touch('touchend',150);return {opts,first,again,drag};});
  expect(result.opts).toEqual([{preventScroll:true}]);expect(result.first).toBe(true);expect(result.again).toBe(false);expect(result.drag).toBe(false);
 });
+test('keyboard animation batches field measurements until viewport settles',async({page})=>{
+ const note=await openNote(page);await note.evaluate(e=>{window.animationReads=0;const original=e.getBoundingClientRect.bind(e);e.getBoundingClientRect=()=>{window.animationReads++;return original();};e.focus({preventScroll:true});});
+ const during=await page.evaluate(async()=>{for(let i=1;i<=24;i++){window.testKeyboard(874-i*18);await new Promise(r=>setTimeout(r,16));}return window.animationReads;});expect(during).toBeLessThanOrEqual(1);
+ await page.waitForTimeout(300);const settled=await page.evaluate(()=>window.animationReads);expect(settled).toBeLessThanOrEqual(3);await visibleWithGap(note);
+});

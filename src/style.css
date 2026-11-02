@@ -56,3 +56,6 @@ form .amount-input input:not([type=radio]):not([type=file]){border:0;background:
 #modal-root.keyboard-open .sheet-body{padding-bottom:32px}
 
 .tx-save-bar>.primary{width:100%;margin:0}.modal-shade{backdrop-filter:none;-webkit-backdrop-filter:none}.sheet-body{scroll-behavior:auto}
+
+/* Isolate modal layout work from the ledger behind it. */
+.sheet{contain:layout style}.modal-open #app{pointer-events:none}
