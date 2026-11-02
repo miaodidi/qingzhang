@@ -1,4 +1,5 @@
 import './style.css';
+import {setupKeyboardAvoidance} from './keyboard-avoidance.js';
 import {setupBudgetSwipe} from './budget-swipe.js';
 import {createFloatingCapture} from './floating-capture.js';
 import {parsePaymentText,captureFingerprint} from './capture.js';
@@ -173,8 +174,7 @@ function checkForUpdate(){
  })();return updateCheck;
 }
 navigator.serviceWorker?.addEventListener('controllerchange',()=>{if(updateRequested)location.reload();});
-function fitKeyboard(){const v=window.visualViewport;if(!v)return;modalRoot.style.setProperty('--visible-height',`${v.height}px`);modalRoot.style.setProperty('--visible-top',`${v.offsetTop}px`);}
-window.visualViewport?.addEventListener('resize',fitKeyboard);window.visualViewport?.addEventListener('scroll',fitKeyboard);fitKeyboard();
+setupKeyboardAvoidance(modalRoot);
 async function init(){try{state=await openStore();state=await updateState(s=>s);render();registerOffline();}catch(err){app.innerHTML=`<div class="fatal"><h1>暂时无法打开本地账本</h1><p>请确认 Safari 允许网站存储，并重新打开页面。不要清除网站数据，以免丢失已有账本。</p><p>${esc(err.message)}</p><button onclick="location.reload()">重新尝试</button></div>`;}}
 let calendarMonth=monthNow();
 document.addEventListener('visibilitychange',async()=>{if(document.visibilityState!=='visible'||demo||!state||monthNow()===calendarMonth)return;try{state=await updateState(s=>s);if(month===calendarMonth)month=monthNow();calendarMonth=monthNow();render();}catch{toast('本月预算暂未准备好，请重新打开应用');}});
