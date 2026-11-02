@@ -39,3 +39,5 @@ form .amount-input input:not([type=radio]):not([type=file]){border:0;background:
 #budget-overview .budget-meter.unset i{width:0}
 
 #budget-form .budget-save-bar{position:sticky;bottom:-28px;z-index:2;background:#fafbf5;padding:10px 0 calc(12px + var(--safe-bottom));border-top:1px solid var(--line);margin-top:16px}#budget-form .budget-save-bar .full{margin-top:0}#budget-category-picker:not([hidden]){display:grid;gap:12px;margin-top:16px;padding:16px;border:1px solid var(--line);border-radius:16px;background:#eef3e7}#budget-category-picker>label{font-size:13px;font-weight:600}.budget-picker-actions{display:flex;gap:10px}.budget-picker-actions button{flex:1}
+
+#budget-form .budget-delete{flex:0 0 34px;min-height:44px;display:grid;place-items:center;color:var(--red);border-radius:9px}#budget-form .budget-delete:hover{background:#f5e9e4}#budget-form .budget-fields .budget-entry{gap:8px}
