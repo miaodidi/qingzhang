@@ -6,14 +6,14 @@ const key='sk-not-a-real-key-for-tests';
 const storageKey='qingzhang.deepseek.v1';
 const endpoint='https://api.deepseek.com/chat/completions';
 const receipt='此剪切板记录为轻账专用\n支付宝\n账单详情\n测试饺子馆\n-15.90\n交易成功\n订单金额\n16.00\n碰一下立减\n-0.10\n支付时间\n'+today()+' 12:00:00\n收款方全称\n测试饺子馆分店\n商品名称\n卤蛋面';
-const answer={categoryId:'e0',confidence:'high',merchant:'测试饺子馆',product:'卤蛋面'};
+const answer={amountCandidates:[15.9],categoryId:'e0',confidence:'high',merchant:'测试饺子馆',product:'卤蛋面'};
 const payload=value=>JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(value)}}]});
 async function action(page,name){await page.locator(`[data-action="${name}"]:visible`).first().click();}
-async function setup(page,enabled=true){
+async function setup(page,enabled=true,text=receipt){
  await page.addInitScript(({enabled,key,storageKey,receipt})=>{
   if(!localStorage.getItem('ai-test-initialized')){localStorage.setItem(storageKey,JSON.stringify({enabled,key}));localStorage.setItem('ai-test-initialized','1');}
   Object.defineProperty(navigator,'clipboard',{value:{readText:async()=>receipt}});
- },{enabled,key,storageKey,receipt});
+ },{enabled,key,storageKey,receipt:text});
 }
 test('AI enhances one click capture, preserves net amount, custom catalog, confirmation and dedup',async({page})=>{
  await setup(page);let calls=0;
@@ -38,11 +38,32 @@ test('settings test uses fictional receipt, keeps secret out of form and backups
  await action(page,'backup');await page.locator('#backup-form button').click();await expect(page.locator('#backup-ready')).toContainText('备份文件已生成');const download=page.waitForEvent('download');await action(page,'download-backup');const file=await download;const stream=await file.createReadStream();let text='';for await(const part of stream)text+=part;expect(text).not.toContain(key);expect(text).not.toContain(storageKey);await action(page,'close');
  await action(page,'ai-settings');await action(page,'ai-clear');expect(await page.evaluate(k=>localStorage.getItem(k),storageKey)).toBeNull();await action(page,'close');await page.reload();await action(page,'settings');await expect(page.locator('[data-action=ai-settings]')).toContainText('使用你自己的密钥');
 });
-test('new user category is sent and selected; saved amount remains unchanged',async({page})=>{
+test('new user category is sent and selected alongside AI payment amount',async({page})=>{
  await setup(page);let customId;
  await page.route(endpoint,async route=>{const data=JSON.parse(route.request().postDataJSON().messages[1].content);const custom=data.categories.find(c=>c.name==='我的面食');expect(custom).toBeTruthy();customId=custom.id;await route.fulfill({contentType:'application/json',body:payload({...answer,categoryId:custom.id})});});
  await page.goto('/');await action(page,'add');await action(page,'toggle-categories');await page.locator('[data-category-action=edit]').click();await page.locator('[data-category-action=add]').click();await page.locator('#new-category-name').fill('我的面食');await page.locator('[data-category-action=create]').click();await expect(page.locator('.category-choice small').last()).toHaveText('我的面食');await action(page,'close');await action(page,'capture');await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试饺子馆 · 卤蛋面');await expect(page.locator('[name=categoryId]:checked')).toHaveValue(customId);await expect(page.locator('#tx-form [name=amount]')).toHaveValue('15.90');
 });
 test('offline mode skips model without changing saved configuration',async({page,context})=>{
  await setup(page);let calls=0;await page.route(endpoint,route=>{calls++;return route.abort();});await page.goto('/');await expect(page.locator('.hero-amount')).toBeVisible();await context.setOffline(true);await action(page,'capture');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('15.90');await expect(page.locator('#modal-root')).toContainText('当前离线');expect(calls).toBe(0);expect(await page.evaluate(k=>JSON.parse(localStorage.getItem(k)).enabled,storageKey)).toBe(true);
+});
+
+test('ranked AI amounts select first, allow switching and manual editing, save the selected amount',async({page})=>{
+ await setup(page,true,'支付成功\n商户名称：测试饺子馆\n实付金额 19.90\n实付金额 20.00\n'+today());
+ await page.route(endpoint,route=>route.fulfill({contentType:'application/json',body:payload({...answer,product:'',amountCandidates:[20,19.9]})}));
+ await page.goto('/');await action(page,'capture');const form=page.locator('#tx-form'),buttons=page.locator('.capture-candidates button');
+ await expect(form.locator('[name=amount]')).toHaveValue('20.00');await expect(buttons).toHaveCount(2);await expect(buttons.first()).toHaveAttribute('aria-pressed','true');await expect(page.locator('#modal-root')).toContainText('多个可能的实际收付金额');
+ await buttons.nth(1).click();await expect(form.locator('[name=amount]')).toHaveValue('19.90');await expect(buttons.first()).toHaveAttribute('aria-pressed','false');await expect(buttons.nth(1)).toHaveAttribute('aria-pressed','true');
+ await form.locator('[name=amount]').fill('18.00');await expect(page.locator('.capture-candidates [aria-pressed=true]')).toHaveCount(0);
+ await buttons.first().click();await page.locator('.tx-save-bar button').click();await expect(page.locator('#tx-form')).toHaveCount(0);await action(page,'ledger');await expect(page.locator('.tx-amount').first()).toContainText('20.00');
+});
+test('single AI amount removes local alternatives; empty AI amount retains local candidates and AI note',async({page})=>{
+ await setup(page);let calls=0;await page.route(endpoint,route=>route.fulfill({contentType:'application/json',body:payload({...answer,amountCandidates:++calls===1?[15.9]:[]})}));
+ await page.goto('/');await action(page,'capture');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('15.90');await expect(page.locator('.capture-candidates')).toHaveCount(0);await expect(page.locator('#modal-root')).not.toContainText('识别到多个金额');
+ await action(page,'close');await action(page,'capture');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('15.90');await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试饺子馆 · 卤蛋面');await expect(page.locator('.capture-candidates button').first()).toHaveAttribute('aria-pressed','true');await expect(page.locator('#modal-root')).toContainText('已使用本地金额识别结果');
+});
+test('both recognizers find no amount: keep field blank, require user amount, retain AI note/category',async({page})=>{
+ await setup(page,true,'支付成功\n商户名称：测试饺子馆\n商品名称：卤蛋面\n'+today());
+ await page.route(endpoint,route=>route.fulfill({contentType:'application/json',body:payload({...answer,amountCandidates:[]})}));
+ await page.goto('/');await action(page,'capture');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('');await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试饺子馆 · 卤蛋面');await expect(page.locator('#tx-form [name=categoryId]:checked')).toHaveValue('e0');await expect(page.locator('#modal-root')).toContainText('请手动填写');
+ await page.locator('.tx-save-bar button').click();await expect(page.locator('#tx-form')).toBeVisible();await page.locator('#tx-form [name=amount]').fill('18.00');await page.locator('.tx-save-bar button').click();await expect(page.locator('#tx-form')).toHaveCount(0);
 });
