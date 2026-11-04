@@ -98,3 +98,16 @@ test('no AI or local amount leaves a blank draft for manual entry',()=>{
  const out=applyAIResult(parsed,categories,{...good,amountCandidates:[],merchant:'测试咖啡馆',product:''});
  assert.equal(out.amount,0);assert.deepEqual(out.candidates,[]);assert.equal(out.categoryId,'custom-noodles');assert.equal(out.note,'测试咖啡馆');assert.ok(out.warnings.some(w=>w.includes('请手动填写')));
 });
+
+test('fulfilled shopping order keeps AI digital category and paid amount without treating refund entry as a refund',()=>{
+ // Fictional product/order fixture; no customer name, address, phone or order ID.
+ const text='打包中 快递即将发出\n订单确认，已通知商家配货\n测试配件店\n透明磁吸手机壳\n发货前可快速退款\n退货包运费保障中\n7天无理由退货\n申请退款\n¥50.40\n共优惠¥15.84\n实付：¥34.56（免运费）\n支付方式：支付宝\n下单时间：2026-11-04 13:34:56';
+ const parsed=parsePaymentText(text,'2026-11-04'),catalog=initialState().categories;
+ const digital=catalog.find(c=>c.name==='数码');
+ const out=applyAIResult(parsed,catalog,{amountCandidates:[34.56],categoryId:digital.id,confidence:'high',merchant:'测试配件店',product:'透明磁吸手机壳'});
+ assert.equal(out.amount,3456);assert.equal(out.type,'expense');assert.equal(out.categoryId,digital.id);assert.equal(out.category,'数码');assert.equal(out.note,'测试配件店 · 透明磁吸手机壳');assert.equal(out.platform,'支付宝');
+ assert.ok(!out.warnings.some(w=>w.includes('退款是否到账')));
+ for(const status of ['退款成功','退款到账','退款处理中','已申请退款','退款金额：34.56']){
+  assert.ok(parsePaymentText(text+'\n'+status,'2026-11-04').warnings.some(w=>w.includes('退款是否到账')));
+ }
+});

@@ -33,7 +33,8 @@ test('two rows expand and collapse without losing selected category or form valu
  await page.locator('.category-choice').filter({hasText:'快递'}).click();
  const selected=await page.locator('[name=categoryId]:checked').inputValue();
  await page.getByRole('button',{name:'收起',exact:true}).click();await expect(visible).toHaveCount(9);
- await expect(page.locator('#tx-categories')).toContainText('已选：快递');
+ await expect(page.locator('.category-choice').filter({hasText:'快递'})).toBeVisible();
+ await expect(page.locator('.category-choice:visible').nth(8).locator('small')).toHaveText('快递');
  await expect(page.locator('[name=categoryId]:checked')).toHaveValue(selected);
  await expect(page.locator('#tx-form [name=amount]')).toHaveValue('12.34');
  await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试保留');

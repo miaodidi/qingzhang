@@ -41,7 +41,9 @@ export function parsePaymentText(input,referenceDate=today()){
  const type=direction||(income&&!expense?'income':'expense');
  if(direction?((direction==='income'&&expense)||(direction==='expense'&&income)):((!income&&!expense)||(income&&expense)))warnings.push('收支方向不明确，请选择正确的收入或支出。');
  if(/转账|充值|提现|还款/.test(normalized))warnings.push('如果是你自己的账户之间划款，请改为“转账”，避免重复计算收支。');
- if(/退款/.test(normalized))warnings.push('请核对退款是否到账；可记录为收入，或调整原支出，避免重复处理。');
+ // A refund button or return guarantee does not mean a refund has occurred.
+ const refundStatus=/退款成功|退款到账|退款完成|已退款|已退回|已原路退回|退款处理中|退款中|退款申请已提交|已申请退款|退款审核中|退款金额|退回金额|退款详情/.test(normalized);
+ if(refundStatus)warnings.push('请核对退款是否到账；可记录为收入，或调整原支出，避免重复处理。');
  let merchant='';
  for(let i=0;i<lines.length;i++){
   const match=lines[i].match(/^(?:商户全称|商户名称|商家名称|收款方全称|收款方名称|收款方|付款给|商品名称|交易对方)\s*[:：]?\s*(.*)$/);

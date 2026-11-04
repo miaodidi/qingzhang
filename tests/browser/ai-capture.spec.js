@@ -67,3 +67,20 @@ test('both recognizers find no amount: keep field blank, require user amount, re
  await page.goto('/');await action(page,'capture');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('');await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试饺子馆 · 卤蛋面');await expect(page.locator('#tx-form [name=categoryId]:checked')).toHaveValue('e0');await expect(page.locator('#modal-root')).toContainText('请手动填写');
  await page.locator('.tx-save-bar button').click();await expect(page.locator('#tx-form')).toBeVisible();await page.locator('#tx-form [name=amount]').fill('18.00');await page.locator('.tx-save-bar button').click();await expect(page.locator('#tx-form')).toHaveCount(0);
 });
+
+test('shopping order selected category stays visible while collapsed and preserves custom catalog order',async({page})=>{
+ await setup(page,true,'打包中 快递即将发出\n订单确认，已通知商家配货\n测试配件店\n透明磁吸手机壳\n发货前可快速退款\n7天无理由退货\n申请退款\n实付：¥34.56（免运费）\n支付方式：支付宝\n'+today());
+ let digitalId;
+ await page.route(endpoint,route=>{
+  const data=JSON.parse(route.request().postDataJSON().messages[1].content);digitalId=data.categories.find(c=>c.name==='数码').id;
+  return route.fulfill({contentType:'application/json',body:payload({amountCandidates:[34.56],categoryId:digitalId,confidence:'high',merchant:'测试配件店',product:'透明磁吸手机壳'})});
+ });
+ await page.goto('/');await action(page,'capture');
+ await expect(page.locator('#tx-form [name=amount]')).toHaveValue('34.56');await expect(page.locator('#tx-form [name=categoryId]:checked')).toHaveValue(digitalId);
+ const selected=page.locator('.category-choice').filter({hasText:'数码'});
+ await expect(selected).toBeVisible();await expect(page.locator('.category-choice:visible')).toHaveCount(9);await expect(page.locator('.category-choice:visible').nth(8).locator('small')).toHaveText('数码');await expect(page.locator('#modal-root')).not.toContainText('退款是否到账');
+ await action(page,'toggle-categories');const fullOrder=await page.locator('.category-choice').evaluateAll(items=>items.map(i=>i.dataset.id));expect(fullOrder.indexOf(digitalId)).toBeGreaterThan(8);
+ await action(page,'toggle-categories');await expect(selected).toBeVisible();
+ await page.locator('.tx-save-bar button').click();await page.locator('.transaction').first().click();await expect(selected).toBeVisible();await expect(page.locator('[name=categoryId]:checked')).toHaveValue(digitalId);
+ await page.locator('.category-choice').filter({hasText:'购物'}).click();await expect(page.locator('[name=categoryId]:checked')).toHaveValue('e1');await page.locator('.tx-save-bar button').click();await expect(page.locator('.transaction').first()).toContainText('购物');
+});
