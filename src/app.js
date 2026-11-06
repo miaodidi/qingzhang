@@ -100,20 +100,37 @@ async function submitCapture(form,text){
  transactionForm(null,result.type,{...result,normalized:undefined,categoryId:category?.id,accountId:(state.accounts.find(a=>a.name==='日常账户')||state.accounts[0]).id,captureId});
 }
 
-function captureModal(){openModal('截图记账',`<p class="soft-note">正在请求读取剪贴板。如系统显示“粘贴”，请点击允许；随后直接生成待确认账单，不会自动入账。</p>${btn('capture-paste',icon('download',18)+' 重试读取剪贴板','primary full')}<form id="capture-form"><label>付款或收款页面的文字<textarea name="text" maxlength="20000" rows="7" required placeholder="也可以长按这里粘贴，例如：&#10;微信支付&#10;支付成功&#10;¥ 28.50&#10;商户名称：咖啡店"></textarea></label><div id="capture-ai-progress" class="soft-note" hidden><p role="status">DeepSeek 正在判断实际收付金额、商家、商品和分类…</p><button type="button" data-action="capture-local" class="text-button">不等待，使用本地结果</button></div><p class="form-error" role="alert"></p><button type="submit" class="secondary full">识别文字</button></form>${btn('shortcut-help','安装截图识别快捷指令','text-button')}<p class="footnote">截图由 iPhone 本地识字；${readAIConfig().enabled&&!demo?'已开启 AI，本次文字和分类列表将发送给 DeepSeek。':'当前使用本地识别，不上传识别文字。'}只保存确认后的账单，不保存整段截图文字。</p>`);}
+function captureModal(){openModal('截图记账',`<p id="capture-clipboard-status" class="soft-note" role="status">正在请求读取剪贴板。如系统显示粘贴或读取权限提示，请允许；也可以直接长按下方文字框粘贴，无需添加专用前缀。</p>${btn('capture-paste',icon('download',18)+' 重试读取剪贴板','primary full')}<form id="capture-form"><label>付款或收款页面的文字<textarea name="text" maxlength="20000" rows="7" required placeholder="也可以长按这里粘贴，例如：&#10;微信支付&#10;支付成功&#10;¥ 28.50&#10;商户名称：咖啡店"></textarea></label><div id="capture-ai-progress" class="soft-note" hidden><p role="status">DeepSeek 正在判断实际收付金额、商家、商品和分类…</p><button type="button" data-action="capture-local" class="text-button">不等待，使用本地结果</button></div><p class="form-error" role="alert"></p><button type="submit" class="secondary full">识别文字</button></form>${btn('shortcut-help','安装截图识别快捷指令','text-button')}<p class="footnote">请先用手机识字功能复制付款或收款文字；${readAIConfig().enabled&&!demo?'已开启 AI，本次文字和分类列表将发送给 DeepSeek。':'当前使用本地识别，不上传识别文字。'}只保存确认后的账单，不保存整段截图文字。</p>`);}
 function captureText(raw){return String(raw||'').replace(new RegExp('^'+CAPTURE_MARKER+'\\s*'),'').normalize('NFKC').replace(/[−–]/g,'-').replace(/\r/g,'').trim();}
 async function pasteCapture(){
  const form=document.querySelector('#capture-form');if(!form||form.dataset.reading||form.dataset.submitting)return;
- form.dataset.reading='1';const field=form.elements.text,button=modalRoot.querySelector('[data-action="capture-paste"]');
+ form.dataset.reading='1';const field=form.elements.text,button=modalRoot.querySelector('[data-action="capture-paste"]'),status=modalRoot.querySelector('#capture-clipboard-status');
  if(button)button.disabled=true;
+ status.textContent='正在请求读取剪贴板，请允许系统的粘贴或读取提示；也可以直接在下方长按粘贴。';
+ form.querySelector('.form-error').textContent='';
+ let timer,cancelled=false,rejectWait;
+ const interruption=new Promise((_,reject)=>{rejectWait=reject;});
+ const cancel=()=>{cancelled=true;rejectWait(new DOMException('Cancelled','AbortError'));};
+ field.addEventListener('input',cancel,{once:true});form.addEventListener('submit',cancel,{once:true});modalRoot.addEventListener('modal-close',cancel,{once:true});
  try{
-  // Invoke in the original click handler, before any async work, to retain iOS user activation.
-  const value=await navigator.clipboard.readText();
+  // Keep this call in the original click handler for iOS user activation.
+  if(typeof navigator.clipboard?.readText!=='function')throw Error('unsupported');
+  const pending=navigator.clipboard.readText();
+  timer=setTimeout(()=>rejectWait(Error('timeout')),8000);
+  const value=await Promise.race([pending,interruption]);
+  if(cancelled||!form.isConnected||form.dataset.submitting)return;
+  status.textContent='已读取剪贴板；请核对识别结果。';
+  if(!captureText(value)){status.textContent='剪贴板没有可识别的文字。';form.querySelector('.form-error').textContent='剪贴板为空，请先复制付款文字，或在下方长按粘贴。';return;}
+  field.value=value;form.removeEventListener('submit',cancel);form.requestSubmit();
+ }catch(error){
   if(!form.isConnected)return;
-  if(!captureText(value)){form.querySelector('.form-error').textContent='剪贴板为空，请先运行截图识别快捷指令，或在下方粘贴文字。';return;}
-  field.value=value;form.requestSubmit();
- }catch{if(form.isConnected){form.querySelector('.form-error').textContent='未能读取剪贴板，请重试，或长按文字框选择“粘贴”，然后点“识别文字”。';}}
- finally{delete form.dataset.reading;if(button)button.disabled=!!form.dataset.submitting;}
+  status.textContent='可长按下方文字框粘贴，再点“识别文字”；无需添加专用前缀。';
+  if(cancelled)return;
+  form.querySelector('.form-error').textContent=error.message==='timeout'?'浏览器未及时返回剪贴板内容，已停止等待。请长按下方文字框粘贴，或重试读取。':error.message==='unsupported'?'当前浏览器不支持直接读取剪贴板，请长按下方文字框粘贴，再点“识别文字”。':'未能读取剪贴板，请允许浏览器的剪贴板权限，或长按文字框选择“粘贴”，然后点“识别文字”。';
+ }finally{
+  clearTimeout(timer);field.removeEventListener('input',cancel);form.removeEventListener('submit',cancel);modalRoot.removeEventListener('modal-close',cancel);
+  delete form.dataset.reading;if(button)button.disabled=!!form.dataset.submitting;
+ }
 }
 function captureReview(draft){return `<div class="soft-note"><strong>${draft.aiEnhanced?'DeepSeek 已辅助识别 · ':''}${draft.platform?esc(draft.platform)+' · ':''}请核对识别结果</strong>${draft.warnings.map(w=>`<p>${esc(w)}</p>`).join('')}</div>${draft.candidates.length>1?`<div class="capture-candidates">${draft.candidates.map(c=>btn('capture-amount','¥ '+money(c.amount),'secondary small',`data-value="${c.amount}" aria-pressed="${c.amount===draft.amount}" title="${esc(c.label)}"`)).join('')}</div>`:''}`;}
 function syncCaptureAmount(){

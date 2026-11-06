@@ -27,3 +27,17 @@ test('bill detail clipboard defaults to net expense, full merchant and dining ca
  await mockClipboard(page,'此剪切板记录为轻账专用\n账单详情\n测试饺子馆\n-23.80\n交易成功\n订单金额\n24.00\n碰一下立减\n-0.20\n支付时间\n2026-10-20 12:00:00\n收款方全称\n测试饺子馆分店\n账单分类\n餐饮美食');await page.goto('/');await action(page,'capture');
  await expect(page.locator('#tx-form [name=amount]')).toHaveValue('23.80');await expect(page.locator('#tx-form [name=type]')).toHaveValue('expense');await expect(page.locator('#tx-form [name=note]')).toHaveValue('测试饺子馆分店');await expect(page.locator('#tx-form [name=categoryId]:checked')).toHaveValue('e0');
 });
+
+test('plain clipboard text needs no shortcut prefix',async({page})=>{
+ await mockClipboard(page,'支付成功\n实付 18.80\n商户名称：测试面馆\n'+today());await page.goto('/');await action(page,'capture');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('18.80');
+});
+test('unsupported clipboard allows manual paste',async({page})=>{
+ await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:undefined}));await page.goto('/');await action(page,'capture');await expect(page.locator('#capture-form .form-error')).toContainText('不支持直接读取');await page.locator('#capture-form textarea').fill('支付成功\n实付 18.80');await page.locator('#capture-form button[type=submit]').click();await expect(page.locator('#tx-form [name=amount]')).toHaveValue('18.80');
+});
+test('hung clipboard times out, retry works and late old read cannot replace a draft',async({page})=>{
+ await page.addInitScript(()=>{window.clipReads=0;Object.defineProperty(navigator,'clipboard',{value:{readText:()=>{window.clipReads++;return window.clipReads===1?new Promise(resolve=>window.finishRead=resolve):Promise.resolve('支付成功\n实付 18.80');}}});});
+ await page.goto('/');await action(page,'capture');await expect(page.locator('#capture-form .form-error')).toContainText('已停止等待',{timeout:12000});await expect(page.locator('#capture-clipboard-status')).not.toContainText('正在请求');await expect(page.locator('[data-action=capture-paste]')).toBeEnabled();await action(page,'capture-paste');await expect(page.locator('#tx-form [name=amount]')).toHaveValue('18.80');await page.evaluate(()=>window.finishRead('支付成功\n实付 99.00'));await expect(page.locator('#tx-form [name=amount]')).toHaveValue('18.80');
+});
+test('manual input immediately cancels pending read and protects pasted text',async({page})=>{
+ await page.addInitScript(()=>Object.defineProperty(navigator,'clipboard',{value:{readText:()=>new Promise(resolve=>window.finishRead=resolve)}}));await page.goto('/');await action(page,'capture');await page.locator('#capture-form textarea').fill('支付成功\n实付 18.80');await expect(page.locator('[data-action=capture-paste]')).toBeEnabled();await page.evaluate(()=>window.finishRead('支付成功\n实付 99.00'));await expect(page.locator('#capture-form textarea')).toHaveValue('支付成功\n实付 18.80');await page.locator('#capture-form button[type=submit]').click();await expect(page.locator('#tx-form [name=amount]')).toHaveValue('18.80');
+});
