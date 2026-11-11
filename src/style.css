@@ -65,3 +65,22 @@ form .amount-input input:not([type=radio]):not([type=file]){border:0;background:
 .capture-candidates button[aria-pressed=true]{background:var(--green);border-color:var(--green);color:#fffef9;box-shadow:0 0 0 2px #276b5520}.capture-candidates button[aria-pressed=true]::before{content:"✓ ";font-weight:700}
 
 .ledger-swipe{position:relative;overflow:hidden;touch-action:pan-y;border-bottom:1px solid #eff0e9}.ledger-swipe:last-child{border-bottom:0}.ledger-swipe>.transaction{position:relative;z-index:1;background:#fffefa;border-bottom:0;transform:translateX(var(--swipe-x,0px));transition:transform .18s ease-out;touch-action:pan-y}.ledger-swipe.swipe-open{--swipe-x:-76px}.ledger-swipe.swiping>.transaction{transition:none}.ledger-delete{position:absolute;right:0;top:6px;bottom:6px;width:68px;border-radius:12px;background:#c65349;color:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;font-size:13px;font-weight:600}.ledger-delete[hidden]{display:none}.ledger-swipe.swiping .ledger-delete{display:flex;pointer-events:none}.ledger-swipe>.transaction:focus-visible{outline-offset:-3px}@media(prefers-reduced-motion:reduce){.ledger-swipe>.transaction{transition:none}}
+/* Account selector keeps the system picker with a visible button affordance. */
+.filter-row .segmented{flex-shrink:0}
+.account-filter-button{position:relative;display:flex;align-items:center;min-width:0;max-width:166px;min-height:44px;border:1px solid #dce4d3;border-radius:12px;background:#fffef8;box-shadow:0 2px 5px #44623d08;color:#4d694d}
+.account-filter-button>svg{position:absolute;left:10px;pointer-events:none}
+.account-filter-label{display:block;min-width:0;padding:9px 25px 9px 32px;font-size:12px;font-weight:550;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.filter-row .account-filter-button select{position:absolute;inset:0;width:100%;height:100%;max-width:none;min-width:0;min-height:44px;padding:0;font-size:16px;opacity:0;cursor:pointer;border-radius:12px}
+.account-filter-chevron{position:absolute;right:8px;display:flex;transform:rotate(90deg);pointer-events:none}
+.account-filter-button:focus-within{outline:2px solid #8a9f72;outline-offset:2px}
+.account-spending-hint{margin:7px 0 20px;font-size:11px;color:#8a977d}
+.account-spending-list{display:grid;gap:19px}
+.account-spending-row{display:flex;align-items:flex-start;gap:11px}
+.account-spending-icon{display:grid;place-items:center;flex-shrink:0;width:34px;height:34px;border-radius:11px;background:#eff2e9}
+.account-spending-copy{min-width:0;flex:1}
+.account-spending-heading,.account-spending-meta{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.account-spending-heading strong{font-size:13px;font-weight:550;overflow-wrap:anywhere}
+.account-spending-heading b{flex-shrink:0;font-size:14px;font-weight:600;font-variant-numeric:tabular-nums}
+.account-spending-meta{margin-top:7px;font-size:10px;color:#8c9980}
+.account-spending-row .progress{height:5px;margin-top:9px}
+.account-spending-footnote{margin:20px 0 0;padding-top:13px;border-top:1px solid #edf0e6;font-size:10px;line-height:1.6;color:#8c9980}
