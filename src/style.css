@@ -72,7 +72,7 @@ form .amount-input input:not([type=radio]):not([type=file]){border:0;background:
 .account-filter-label{display:block;min-width:0;padding:9px 25px 9px 32px;font-size:12px;font-weight:550;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .filter-row .account-filter-button select{position:absolute;inset:0;width:100%;height:100%;max-width:none;min-width:0;min-height:44px;padding:0;font-size:16px;opacity:0;cursor:pointer;border-radius:12px}
 .account-filter-chevron{position:absolute;right:8px;display:flex;transform:rotate(90deg);pointer-events:none}
-.account-filter-button:focus-within{outline:2px solid #8a9f72;outline-offset:2px}
+.account-filter-button:focus-within{outline:none}
 .account-spending-hint{margin:7px 0 20px;font-size:11px;color:#8a977d}
 .account-spending-list{display:grid;gap:19px}
 .account-spending-row{display:flex;align-items:flex-start;gap:11px}

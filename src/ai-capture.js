@@ -25,6 +25,9 @@ export function prepareAIText(text){
  const kept=[];
  for(let i=0;i<lines.length;i++){
   const line=lines[i].trim();
+  // Added by the iOS shortcut. It is useful locally for account matching but
+  // must not be sent to DeepSeek because it can bias merchant/category output.
+  if(/^当前\s*app\s*(?:为|是|[:：])\s*/i.test(line))continue;
   if(sensitive.test(line)){if(!line.replace(sensitive,'').trim())i++;continue;}
   kept.push(line);
  }
@@ -39,7 +42,7 @@ categoryId 必须从用户给出的 categories 中选一个 id，不确定时返
 按商品或服务的实际用途选择最贴切的分类，商品证据优先于商家大类。例如超市买水果应选水果，买饮料选饮料，不要一律归购物；只知道美团、淘宝、京东而不知道商品时不要猜商品。
 merchant 为实际商家或交易对方，product 为商品或服务；都必须逐字摘取 receipt 中连续出现的文字片段，可去掉店名末尾的多余符号，不能改写、缩写、编造，无法确定就返回空字符串。
 不要把收单机构、清算机构、银联、拉卡拉、收钱吧、付款方式、银行或营销文案当作商家或商品。不要把账单分类、交易状态、积分、优惠贴纸当商品。
-只处理金额、备注和分类，不输出日期、账户或收支方向；这些由应用单独处理。type 是应用识别的收支方向，仅在给出的同方向分类中选择。`;
+paymentPlatform 只能为“微信”“支付宝”或空字符串；仅在 receipt 明确出现付款方式时填写。只处理金额、备注、分类和付款平台，不输出日期、账户或收支方向；这些由应用单独处理。type 是应用识别的收支方向，仅在给出的同方向分类中选择。`;
 export function buildAIRequest(result,categories){
  const available=categories.filter(c=>c.type===result.type).map(({id,name})=>({id,name}));
  const receipt=prepareAIText(result.normalized);
@@ -102,7 +105,7 @@ function receiptAmounts(text){
  return found;
 }
 export function applyAIResult(local,categories,value){
- if(!value||typeof value!=='object'||Array.isArray(value)||!['high','medium','low'].includes(value.confidence)||!(value.categoryId===null||typeof value.categoryId==='string')||!['merchant','product'].every(k=>typeof value[k]==='string'&&value[k].length<=120))throw Error('DeepSeek 返回的格式无法识别');
+ if(!value||typeof value!=='object'||Array.isArray(value)||!['high','medium','low'].includes(value.confidence)||!(value.categoryId===null||typeof value.categoryId==='string')||!['merchant','product'].every(k=>typeof value[k]==='string'&&value[k].length<=120)||!(value.paymentPlatform===undefined||['','微信','支付宝'].includes(value.paymentPlatform)))throw Error('DeepSeek 返回的格式无法识别');
  let warnings=[...local.warnings];
  const rawAmounts=value.amountCandidates;
  const validList=Array.isArray(rawAmounts)&&rawAmounts.length<=6;
@@ -137,5 +140,6 @@ export function applyAIResult(local,categories,value){
  const note=parts.join(' · ');
  if(!note)warnings.push('AI 未提取到可靠备注，已保留本地备注，请核对。');
  // Only these fields can be changed by the model. Never spread untrusted model JSON.
- return {...local,categoryId:validCategory?category.id:undefined,category:validCategory?category.name:local.category,note:note||local.note,warnings,aiEnhanced:true};
+ const platform=value.paymentPlatform||local.platform||'';
+ return {...local,categoryId:validCategory?category.id:undefined,category:validCategory?category.name:local.category,note:note||local.note,platform,warnings,aiEnhanced:true};
 }

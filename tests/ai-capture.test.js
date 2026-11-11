@@ -11,12 +11,23 @@ const good={amountCandidates:[15.9],categoryId:'custom-noodles',confidence:'high
 const key='sk-not-a-real-key-for-tests';
 const response=(value=good,finish_reason='stop')=>({ok:true,json:async()=>({choices:[{finish_reason,message:{content:JSON.stringify(value)}}]})});
 test('AI uses current custom categories, bounded non-thinking JSON and redacts identifiers',()=>{
- const body=buildAIRequest(local,categories),data=JSON.parse(body.messages[1].content);
+ const body=buildAIRequest(parsePaymentText('当前app为微信\n'+receipt),categories),data=JSON.parse(body.messages[1].content);
  assert.equal(body.model,AI_MODEL);assert.deepEqual(body.thinking,{type:'disabled'});assert.equal(body.response_format.type,'json_object');assert.equal(body.max_tokens,500);
  assert.deepEqual(data.categories,[{id:'custom-noodles',name:'吃面'}]);assert.equal(data.type,'expense');
  for(const secret of ['8903','1234567890123456789','13800138000','拉卡拉','银联'])assert.ok(!data.receipt.includes(secret));
  assert.ok(data.receipt.includes('卤蛋面'));assert.ok(data.receipt.includes('-15.90'));
+ assert.ok(!data.receipt.includes('当前app为'));
  assert.throws(()=>buildAIRequest({...local,normalized:'a'.repeat(12001)},categories),/过多/);
+});
+test('shortcut app hint is trusted for WeChat/Alipay and non-payment apps defer platform to AI',()=>{
+ const wx=parsePaymentText('当前app为微信\n支付成功\n实付 18.00');
+ assert.equal(wx.platform,'微信');
+ const ali=parsePaymentText('当前app为支付宝\n账单详情\n实付 19.00');
+ assert.equal(ali.platform,'支付宝');
+ const douyin=parsePaymentText('当前app为抖音\n支付方式\n支付宝\n实付 20.00');
+ assert.equal(douyin.platform,'');
+ const out=applyAIResult(douyin,categories,{...good,paymentPlatform:'支付宝'});
+ assert.equal(out.platform,'支付宝');
 });
 test('model selects evidenced payment candidates but cannot override direction, date or account',()=>{
  const out=applyAIResult(local,categories,{...good,amount:1600,type:'income',date:'1900-01-01',accountId:'evil',warnings:[]});

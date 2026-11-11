@@ -3,6 +3,20 @@ const paid=/实付|实际支付|实际付款|实收|实际到账|到账金额/;
 const amountLabel=/金额|合计|总计|实付|实收|实际到账|支付成功|付款成功|收款成功|转账成功/;
 const ignored=/余额|优惠|折扣|立减|红包抵扣|原价|积分|手续费|可用额度|账单日|订单号|交易号|流水号|商户号|手机号|银行卡|尾号|参考号/;
 const number=/(?<![\d.])[-+]?\s*(?:\d{1,3}(?:,\d{3})+|\d{1,9})(?:\.\d{1,2})?(?![\d.])/g;
+export function detectPaymentPlatform(text){
+ const lines=String(text||'').normalize('NFKC').replace(/\r/g,'').split('\n').map(s=>s.trim()).filter(Boolean);
+ // The shortcut writes this trusted hint after OCR. It takes precedence over
+ // words found in the receipt because a payment detail page may omit the app
+ // name or mention another payment method.
+ const hint=lines.find(line=>/^当前\s*app\s*(?:为|是|[:：])\s*/i.test(line));
+ const value=hint?.replace(/^当前\s*app\s*(?:为|是|[:：])\s*/i,'').trim()||'';
+ if(/微信/.test(value))return '微信';
+ if(/支付宝/.test(value))return '支付宝';
+ // A non-payment app hint deliberately suppresses receipt words here. The AI
+ // gets the payment-method text and can decide whether it was WeChat/Alipay.
+ if(hint)return '';
+ return /支付宝/.test(text)?'支付宝':/微信|零钱/.test(text)?'微信':'';
+}
 export function parsePaymentText(input,referenceDate=today()){
  if(typeof input!=='string'||input.trim().length<2)throw Error('请先粘贴付款页面识别出的文字');
  if(input.length>20000)throw Error('文字太长，请只保留一笔付款或收款的内容');
@@ -55,6 +69,6 @@ export function parsePaymentText(input,referenceDate=today()){
  let date=referenceDate;const dm=normalized.match(/(20\d{2})[-/.年](\d{1,2})[-/.月](\d{1,2})日?/);
  if(dm){const value=`${dm[1]}-${dm[2].padStart(2,'0')}-${dm[3].padStart(2,'0')}`;if(validDate(value)&&value<=referenceDate)date=value;else warnings.push('识别出的日期无效或在未来，暂用今天，请核对。');}
  else warnings.push('未识别到完整交易日期，暂用今天，请核对。');
- return {normalized,amount:candidates[0]?.amount||0,candidates,type,category,date,note:merchant,warnings,platform:/支付宝/.test(normalized)?'支付宝':/微信|零钱/.test(normalized)?'微信':''};
+ return {normalized,amount:candidates[0]?.amount||0,candidates,type,category,date,note:merchant,warnings,platform:detectPaymentPlatform(normalized)};
 }
 export async function captureFingerprint(text){const bytes=new TextEncoder().encode(text.replace(/\s+/g,' ').trim());const hash=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(hash)].map(n=>n.toString(16).padStart(2,'0')).join('');}
